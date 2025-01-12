@@ -1,101 +1,210 @@
-import Image from 'next/image';
+'use client';
+
+import {
+  GENERATIONS,
+  type Generation,
+  type Pokemon,
+  getPokemonJapaneseName,
+  normalizePokemonName,
+} from '@/utils/pokemon';
+import { useEffect, useState } from 'react';
+import styles from './page.module.css';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{' '}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [pokemon, setPokemon] = useState<Pokemon | null>(null);
+  const [inputName, setInputName] = useState('');
+  const [correctCount, setCorrectCount] = useState(0);
+  const [maxCorrectCount, setMaxCorrectCount] = useState(0);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [remainingPokemonIds, setRemainingPokemonIds] = useState<number[]>([]);
+  const [selectedGeneration, setSelectedGeneration] = useState<Generation>(
+    GENERATIONS[0],
+  );
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+  const initializePokemonIds = (generation: Generation) => {
+    const ids = Array.from(
+      { length: generation.endId - generation.startId + 1 },
+      (_, i) => i + generation.startId,
+    );
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    return ids;
+  };
+
+  const startGame = async (generation: Generation) => {
+    setIsPlaying(true);
+    setSelectedGeneration(generation);
+    setCorrectCount(0);
+    const newIds = initializePokemonIds(generation);
+    setRemainingPokemonIds(newIds);
+    const pokemonId = newIds[0];
+    await fetchPokemonById(pokemonId);
+    setRemainingPokemonIds(newIds.slice(1));
+  };
+
+  const fetchNewPokemon = async () => {
+    if (remainingPokemonIds.length === 0) {
+      const newIds = initializePokemonIds(selectedGeneration);
+      setRemainingPokemonIds(newIds);
+      const pokemonId = newIds[0];
+      await fetchPokemonById(pokemonId);
+      setRemainingPokemonIds(newIds.slice(1));
+      return;
+    }
+
+    const pokemonId = remainingPokemonIds[0];
+    await fetchPokemonById(pokemonId);
+    setRemainingPokemonIds((prev) => prev.slice(1));
+  };
+
+  const fetchPokemonById = async (pokemonId: number) => {
+    try {
+      const response = await fetch(
+        `https://pokeapi.co/api/v2/pokemon/${pokemonId}`,
+      );
+      const data = (await response.json()) as {
+        id: number;
+        name: string;
+        sprites: {
+          front_default: string;
+        };
+      };
+      const japaneseName = await getPokemonJapaneseName(data.name);
+
+      const newPokemon: Pokemon = {
+        id: data.id,
+        name: data.name,
+        japaneseName: japaneseName,
+        image: data.sprites.front_default,
+      };
+
+      setPokemon(newPokemon);
+    } catch (error) {
+      console.error('ポケモンのデータを取得できませんでした。', error);
+      setPokemon(null);
+    }
+
+    setInputName('');
+    setShowAnswer(false);
+    setIsCorrect(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pokemon) return;
+
+    const normalizedInput = normalizePokemonName(inputName);
+    const normalizedCorrect = normalizePokemonName(pokemon.japaneseName);
+
+    const isAnswerCorrect = normalizedInput === normalizedCorrect;
+    setIsCorrect(isAnswerCorrect);
+    setShowAnswer(true);
+
+    if (isAnswerCorrect) {
+      const newCount = correctCount + 1;
+      setCorrectCount(newCount);
+      setMaxCorrectCount(Math.max(maxCorrectCount, newCount));
+      setTimeout(() => {
+        fetchNewPokemon();
+      }, 1000);
+    }
+  };
+
+  const handleRetry = async () => {
+    setCorrectCount(0);
+    setRemainingPokemonIds(initializePokemonIds(selectedGeneration));
+    await fetchNewPokemon();
+  };
+
+  return (
+    <main className={styles.main}>
+      <div className={styles.container}>
+        <h1 className={styles.title}>ポケモンクイズ</h1>
+
+        {!isPlaying ? (
+          <div className={styles.startContainer}>
+            <h2 className={styles.subtitle}>世代を選択してください</h2>
+            <div className={styles.generationGrid}>
+              {GENERATIONS.map((gen) => (
+                <button
+                  key={gen.id}
+                  onClick={() => startGame(gen)}
+                  className={styles.generationButton}
+                >
+                  {gen.name}
+                  <span className={styles.pokemonCount}>
+                    (No.{gen.startId}～{gen.endId})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={styles.scores}>
+              <p>現在の連続正解数: {correctCount}</p>
+              <p>最大連続正解数: {maxCorrectCount}</p>
+            </div>
+
+            {pokemon && (
+              <div className={styles.gameArea}>
+                {showAnswer && (
+                  <div className={styles.pokemonInfo}>
+                    <p>図鑑No.{pokemon.id}</p>
+                    <p>正解: {pokemon.japaneseName}</p>
+                  </div>
+                )}
+
+                <img
+                  src={pokemon.image}
+                  alt="Who's that Pokemon?"
+                  className={styles.pokemonImage}
+                />
+
+                {showAnswer && (
+                  <div className={styles.result}>
+                    {isCorrect ? (
+                      <span className={styles.correct}>⭕️</span>
+                    ) : (
+                      <span className={styles.incorrect}>❌</span>
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className={styles.form}>
+                  <input
+                    type="text"
+                    value={inputName}
+                    onChange={(e) => setInputName(e.target.value)}
+                    placeholder="ポケモンの名前を入力"
+                    className={styles.input}
+                    disabled={showAnswer}
+                    data-1p-ignore
+                    autoComplete="off"
+                  />
+                  {!showAnswer ? (
+                    <button type="submit" className={styles.button}>
+                      送信
+                    </button>
+                  ) : !isCorrect ? (
+                    <button
+                      type="button"
+                      onClick={handleRetry}
+                      className={styles.retryButton}
+                    >
+                      リトライ
+                    </button>
+                  ) : null}
+                </form>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </main>
   );
 }
